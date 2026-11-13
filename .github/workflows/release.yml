@@ -35,6 +35,11 @@ jobs:
         run: |
           $version=(Get-Content package.json -Raw|ConvertFrom-Json).version
           ./tests/updater.tests.ps1 -ReleaseFile "release/Lexo-$version-win-x64.exe" -Version $version
+      - name: Launch portable executable with an isolated workspace
+        shell: powershell
+        run: |
+          $version=(Get-Content package.json -Raw|ConvertFrom-Json).version
+          ./tests/portable-start.tests.ps1 -ReleaseFile "release/Lexo-$version-win-x64.exe"
       - uses: actions/upload-artifact@v4
         with:
           name: Lexo-Windows
