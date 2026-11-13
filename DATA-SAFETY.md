@@ -4,9 +4,9 @@ Lexo 0.4.0 separates the application from the firm's workspace. Updating the app
 
 ## On your uncle's computer
 
-Use the prepared **Lexo-desktop/Lexo.cmd** launcher from now on. Save and close Word documents and close the old Lexo window before the first launch. The first opening of an older workspace takes a verified recovery copy before upgrading it. Existing case and document names and locations are retained.
+Open **%LOCALAPPDATA%\Programs\Lexo\Lexo.exe** directly. Save and close Word documents and close the old Lexo window before the first launch. The first opening of an older workspace takes a verified recovery copy before upgrading it. Existing case and document names and locations are retained.
 
-For later updates: save and close Word and Lexo, then double-click **update-lexo.cmd**. The script downloads the latest published stable release, verifies its checksum and executable version, stages it, then switches a small application pointer. The previous app executable stays on disk. It never kills Word or Lexo and never restores an older database automatically. If the download fails, the current app remains selected. If the new app cannot open the workspace, it reports the error and preserves the data; contact the developer rather than launching an older executable.
+For later updates: save and close Word and Lexo, then double-click **update-lexo.cmd**. The script downloads the latest stable release, verifies its checksum and executable version, then atomically replaces **Lexo.exe**. Failed downloads or replacements preserve the installed executable. Successful updates retain no old executable or download. There is no application pointer or version folder. If the new app cannot open the workspace, it reports the error and preserves the data; contact the developer for a forward fix.
 
 The GitHub release feed must be accessible on this computer. A private repository without authentication, or a repository with no published release, cannot provide automatic downloads. No GitHub token is embedded in the script. A developer-supplied release file and checksum can also be installed offline with `update-lexo.ps1 -ReleaseFile ... -Version ... -ExpectedSha256 ...`. The initial published release still needs to be uploaded before online updates can work.
 
@@ -16,11 +16,10 @@ In **Settings → Backup & restore**, select a dedicated folder synced by Google
 
 ```text
 Lexo-desktop/                       Application only; keep the whole folder
-  Lexo.cmd                         Stable launch entry point
+  Lexo.exe                         Single installed application; open directly
   update-lexo.cmd                   Stable update entry point
-  active.json                      Current and previous app release
-  versions/0.4.0/Lexo.exe           Portable application
-  downloads/                       Downloaded application releases
+  Lexo.Update.psm1                  Verification and replacement helpers
+  update-lexo.ps1                   Update script invoked by update-lexo.cmd
   logs/                            Startup results, no case contents
 
 %APPDATA%/lexo/                     Stable Windows-user profile
@@ -64,7 +63,7 @@ Keep source in GitHub; never commit the workspace, documents, backups, secrets, 
 2. Add new migrations without rewriting old ones. Prefer additive tables/columns. Do not remove or overwrite saved values. Never reset `user_version` to force an upgrade.
 3. Increment `package.json` version for every distributed change, including UI-only changes. Never replace the bytes of an existing release version.
 4. Run `scripts/lexo.ps1 test`, build with `scripts/lexo.ps1 package`, run `tests/updater.tests.ps1` against the built executable, then open a copied previous-version workspace with representative documents. Verify cases, field values, document hashes, backup and restore. Never test experimental migrations on the real workspace.
-5. Push source and a matching `vX.Y.Z` tag. The included GitHub workflow runs the checks, builds Windows and creates a **draft** release. Review it and publish when ready. The portable asset must be named `Lexo-X.Y.Z-win-x64.exe`; the updater requires GitHub's SHA-256 asset digest.
+5. Push source and a matching `vX.Y.Z` tag when ready to publish. The included GitHub workflow runs the checks, builds Windows and publishes the release. The portable asset must be named `Lexo-X.Y.Z-win-x64.exe`; the updater requires GitHub's SHA-256 asset digest.
 6. Your uncle runs `update-lexo.cmd`. If startup fails, repair forward with a newer release using a copied workspace. Do not automatically switch to an old app or old data: new work could otherwise disappear.
 
-No source has been pushed or release published by this change. Backup destination/password selection and the first real off-device backup remain user setup steps.
+Source and release v0.4.0 are published on GitHub. Backup destination/password selection and the first real off-device backup remain user setup steps.

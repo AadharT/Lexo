@@ -1,5 +1,6 @@
 param([string]$ReleaseFile,[string]$Version,[string]$ExpectedSha256,[switch]$NoLaunch)
 $ErrorActionPreference='Stop';[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
+$downloadedFile=$null
 Import-Module (Join-Path $PSScriptRoot 'Lexo.Update.psm1') -Force
 try{
  Assert-LexoHome $PSScriptRoot;Assert-LexoClosed
@@ -17,11 +18,12 @@ try{
   $ExpectedSha256=$asset[0].digest.Substring(7);$url=[Uri]$asset[0].browser_download_url
   if($url.Scheme -ne 'https' -or $url.Host -ne 'github.com' -or -not $url.AbsolutePath.StartsWith("/$repository/releases/download/",[StringComparison]::OrdinalIgnoreCase)){throw 'The release download URL is invalid.'}
   $current=Get-LexoActive $PSScriptRoot;if($current -and [Version]$Version -le [Version]$current.current.version){Write-Host 'Lexo is already on this release or a newer one.';exit 0}
-  $downloads=Join-Path $PSScriptRoot 'downloads';[IO.Directory]::CreateDirectory($downloads)|Out-Null;$ReleaseFile=Join-Path $downloads "$Version-$([Guid]::NewGuid()).exe";Write-Host 'Downloading Lexo...';Invoke-WebRequest -Uri $url.AbsoluteUri -OutFile $ReleaseFile -UseBasicParsing -TimeoutSec 300
+  $ReleaseFile=Join-Path $PSScriptRoot "Lexo.download-$([Guid]::NewGuid())";$downloadedFile=$ReleaseFile;Write-Host 'Downloading Lexo...';Invoke-WebRequest -Uri $url.AbsoluteUri -OutFile $ReleaseFile -UseBasicParsing -TimeoutSec 300
  }
  if([Version]$Version -lt [Version]$configuration.minimumSafeVersion){throw 'This release predates the data-safety safeguards and cannot be installed by this updater.'}
  Assert-LexoClosed
  $result=Install-LexoRelease -AppHome $PSScriptRoot -ReleaseFile $ReleaseFile -Version $Version -ExpectedSha256 $ExpectedSha256 -WorkspaceRoot $workspace
- Write-Host "Lexo $($result.current.version) is ready. Your workspace was not replaced. The previous app release was retained."
- if(-not $NoLaunch){& (Join-Path $PSScriptRoot 'launch-lexo.ps1');if($LASTEXITCODE){exit $LASTEXITCODE}}
+ Write-Host "Lexo $($result.current.version) is ready at $PSScriptRoot\Lexo.exe. Your workspace was not replaced."
+ if(-not $NoLaunch){Start-Process -FilePath (Join-Path $PSScriptRoot 'Lexo.exe') -WorkingDirectory $PSScriptRoot}
 }catch{Write-Host $_.Exception.Message -ForegroundColor Red;exit 1}
+finally{if($downloadedFile -and (Test-Path -LiteralPath $downloadedFile)){Remove-Item -LiteralPath $downloadedFile}}

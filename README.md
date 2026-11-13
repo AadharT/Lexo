@@ -4,7 +4,7 @@ Single-computer case and document management for a legal firm. Electron, React/V
 
 ## Run
 
-Use the prepared **Lexo-desktop/Lexo.cmd** launcher. The portable build is **release/Lexo-0.4.0-win-x64.exe**. Read [DATA-SAFETY.md](DATA-SAFETY.md) for updates, workspace locations, backups and future-release requirements. This is an unsigned prototype build.
+Open **%LOCALAPPDATA%\Programs\Lexo\Lexo.exe** directly. Run **update-lexo.cmd** beside it to replace the executable with the latest verified GitHub release. Only one installed executable is retained. Read [DATA-SAFETY.md](DATA-SAFETY.md) for workspace locations and backups. This is an unsigned prototype build.
 
 For development, double-click **Start-Lexo.cmd**, or:
 
@@ -168,4 +168,4 @@ The live release was downloaded and checksum-verified. Source and packaged deskt
 
 The 0.3.1 desktop regression check types `state bank of india`, mixed-case/extra-space variants and reordered words; verifies address-only branch search results; checks missing Bank and Branch are blocked; and saves a case with Client left empty.
 
-The supplied GitHub repository was unavailable to this machine; this remains a local source deliverable and has not been pushed.
+Source and tagged releases are published at https://github.com/AadharT/Lexo. Use `pnpm dev` with hot reload for routine testing; distribute executables through GitHub releases.

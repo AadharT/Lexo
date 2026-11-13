@@ -19,7 +19,8 @@ try{
   Install-LexoRelease $testAppHome $previousFile $previousVersion $previousHash $workspace|Out-Null
  }
  $active=Install-LexoRelease $testAppHome $ReleaseFile $Version $sha $workspace
- if($PreviousReleaseFile){if($active.previous.version -ne $previousVersion){throw 'Previous release pointer not retained.'};Resolve-LexoExecutable $testAppHome $active.previous|Out-Null}
+ if(@(Get-ChildItem -LiteralPath $testAppHome -Filter '*.exe').Count -ne 1){throw 'Expected one installed executable.'}
+ if(Test-Path -LiteralPath (Join-Path $testAppHome 'versions')){throw 'Version folders must not be retained.'}
  if($active.current.version -ne $Version){throw 'Incorrect active version.'}
  $exe=Resolve-LexoExecutable $testAppHome $active.current
  if((Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant() -ne $sha){throw 'Installed bytes differ.'}
@@ -28,14 +29,22 @@ try{
  Assert-LexoClosed @()
  Reject {Assert-LexoWorkspaceSeparate $testAppHome (Join-Path $testAppHome 'firm')} 'inside'
  Reject {Resolve-LexoExecutable $testAppHome ([pscustomobject]@{relativePath='../Lexo.exe';sha256=$sha})} 'Invalid release'
- # Simulate a later active release: the earlier artifact must never replace it.
- $newer=[ordered]@{format=1;current=@{version='99.0.0';relativePath="versions/$Version/Lexo.exe";sha256=$sha};previous=$active.current}
- Write-LexoJson (Join-Path $testAppHome 'active.json') $newer
- Reject {Install-LexoRelease $testAppHome $ReleaseFile $Version $sha $workspace} 'Downgrades'
- if((Get-LexoActive $testAppHome).current.version -ne '99.0.0'){throw 'Downgrade mutated pointer.'}
- if(-not(Test-Path -LiteralPath (Join-Path $testAppHome 'active.json.bak'))){throw 'Previous pointer not retained.'}
+ # Simulate version metadata from an earlier/later installed binary while testing the real file swap.
+ $module=Get-Module Lexo.Update
+ & $module { $script:originalActive=${function:Get-LexoActive};$script:simulatedVersion='0.0.1';$script:reads=0;function script:Get-LexoActive {param($AppHome);$value=& $script:originalActive $AppHome;if($value -and $script:reads++ -eq 0){$value.current.version=$script:simulatedVersion};return $value} }
+ try{
+  Install-LexoRelease $testAppHome $ReleaseFile $Version $sha $workspace|Out-Null
+  & $module {$script:simulatedVersion='0.0.1';$script:reads=0}
+  $locked=[IO.File]::Open($exe,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+  try{Reject {Install-LexoRelease $testAppHome $ReleaseFile $Version $sha $workspace} 'used by another process|being used|access'}finally{$locked.Dispose()}
+  if((Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant() -ne $sha){throw 'Failed replacement changed the installed executable.'}
+  & $module {$script:simulatedVersion='99.0.0';$script:reads=0}
+  Reject {Install-LexoRelease $testAppHome $ReleaseFile $Version $sha $workspace} 'Downgrades'
+ }finally{& $module {Set-Item Function:script:Get-LexoActive $script:originalActive}}
+ if((Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant() -ne $sha){throw 'Replacement changed expected executable bytes.'}
+ if(@(Get-ChildItem -LiteralPath $testAppHome -Filter 'Lexo.partial-*').Count){throw 'Temporary application copy was retained.'}
  if((Get-FileHash -LiteralPath (Join-Path $workspace 'lexo.sqlite')).Hash -ne $before){throw 'Workspace changed.'}
- Write-Host 'PASS: checksum rejection, staged install, idempotence, process guard, path guard, downgrade refusal, retained pointer, unchanged workspace.'
+ Write-Host 'PASS: checksum rejection, single executable, atomic replacement, idempotence, process guard, path guard, downgrade refusal, unchanged workspace.'
 }finally{
  # Delete only this test-created directory within the system temporary folder.
  if(-not(Test-LexoInside ([IO.Path]::GetTempPath()) $testRoot) -or (Split-Path -Leaf $testRoot) -notlike 'lexo-update-test-*'){throw 'Unsafe test cleanup target.'}
