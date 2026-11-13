@@ -50,8 +50,8 @@ jobs:
         with:
           name: Lexo-Windows
           path: release
-      - name: Publish a draft for review
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" release/*.exe --draft --generate-notes --title "Lexo $GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" release/*.exe --generate-notes --title "Lexo $GITHUB_REF_NAME"
