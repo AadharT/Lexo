@@ -1,0 +1,57 @@
+name: Validate and build Lexo
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install -g pnpm@11.25.0
+      - name: Install locked dependencies and runtime
+        shell: powershell
+        run: ./scripts/lexo.ps1 setup
+      - name: Verify release tag
+        shell: powershell
+        run: |
+          $version=(Get-Content package.json -Raw|ConvertFrom-Json).version
+          if($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version"){throw 'Tag must match package.json version.'}
+      - name: Test durability and application storage
+        shell: powershell
+        run: ./scripts/lexo.ps1 test
+      - name: Build portable application
+        shell: powershell
+        run: ./scripts/lexo.ps1 package
+      - name: Test application switching
+        shell: powershell
+        run: |
+          $version=(Get-Content package.json -Raw|ConvertFrom-Json).version
+          ./tests/updater.tests.ps1 -ReleaseFile "release/Lexo-$version-win-x64.exe" -Version $version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lexo-Windows
+          path: release/Lexo-*-win-x64.exe
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Lexo-Windows
+          path: release
+      - name: Publish a draft for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" release/*.exe --draft --generate-notes --title "Lexo $GITHUB_REF_NAME"
