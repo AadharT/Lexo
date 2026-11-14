@@ -1,0 +1,7 @@
+/* The app header occupies the native title-bar area. Windows keeps its own
+   caption buttons so Snap layouts, accessibility and system shortcuts work. */
+.topbar{position:sticky;top:0;z-index:20;-webkit-app-region:drag;user-select:none;padding-right:max(164px,calc(100vw - env(titlebar-area-width,100vw) - env(titlebar-area-x,0px) + 18px))}
+.sidebar-brand{-webkit-app-region:drag;user-select:none}
+.topbar button,.topbar a,.topbar input,.topbar select,.topbar [role=combobox]{-webkit-app-region:no-drag}
+.setup-shell{padding-top:100px}
+.setup-shell::before,.loading::before{content:'';position:fixed;inset:0 0 auto;height:65px;background:var(--surface);border-bottom:1px solid var(--border);-webkit-app-region:drag;z-index:20}

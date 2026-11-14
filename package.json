@@ -1,6 +1,6 @@
 {
   "name": "lexo",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "description": "Local case and document management for Indian legal practices",
   "main": "electron/main.cjs",
@@ -12,17 +12,19 @@
     "package": "vite build && electron-builder --win portable"
   },
   "dependencies": {
+    "docx": "^9.0.0",
+    "fflate": "^0.8.2",
+    "lucide-react": "^0.468.0",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "lucide-react": "^0.468.0",
-    "docx": "^9.0.0",
-    "fflate": "^0.8.2"
+    "sax": "^1.6.1"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
     "electron": "45.3.1",
     "electron-builder": "^26.0.0",
-    "vite": "^7.0.0",
-    "@vitejs/plugin-react": "^5.0.0"
+    "vite": "^7.0.0"
   },
   "build": {
     "appId": "in.lexo.desktop",
@@ -35,7 +37,11 @@
       "package.json"
     ],
     "asarUnpack": [
-      "electron/directory-worker.cjs",
+      "electron/**/*.cjs",
+      "node_modules/pdfjs-dist/**/*",
+      "node_modules/fflate/**/*",
+      "node_modules/sax/**/*",
+      "node_modules/@napi-rs/**/*",
       "electron/directory-cache.cjs"
     ],
     "win": {

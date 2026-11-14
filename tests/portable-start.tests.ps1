@@ -6,6 +6,10 @@ New-Item -ItemType Directory -Path $testRoot|Out-Null
 $receipt=Join-Path $testRoot 'startup.json'
 $savedProfile=$env:LEXO_DATA_DIR;$savedReceipt=$env:LEXO_STARTUP_RECEIPT;$savedDirectory=$env:LEXO_SKIP_DIRECTORY_DOWNLOAD
 $env:LEXO_DATA_DIR=Join-Path $testRoot 'profile';$env:LEXO_STARTUP_RECEIPT=$receipt;$env:LEXO_SKIP_DIRECTORY_DOWNLOAD='1'
+$fixtureScript=Join-Path $PSScriptRoot 'helpers/portable-workspace.cjs'
+$nodeExecutable=(Get-Command node -ErrorAction Stop).Source
+& $nodeExecutable $fixtureScript seed $testRoot | Out-Null
+if($LASTEXITCODE -ne 0){throw 'Could not create the isolated release-test workspace.'}
 $started=Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) -WindowStyle Hidden -PassThru
 $startedAt=$started.StartTime
 try{
@@ -20,7 +24,16 @@ try{
  $status=Get-Content -LiteralPath $receipt -Raw|ConvertFrom-Json
  if($status.status -ne 'ready'){throw "Application startup failed: $($status.message)"}
  if(-not(Test-Path -LiteralPath (Join-Path $testRoot 'profile/library/lexo.sqlite'))){throw 'Isolated workspace was not created.'}
- Write-Host 'PASS: released portable executable reaches the application using an isolated workspace.'
+ $deadline=[DateTime]::UtcNow.AddSeconds(60)
+ do{
+  $indexState=& $nodeExecutable $fixtureScript check $testRoot | ConvertFrom-Json
+  if($LASTEXITCODE -ne 0){throw 'Could not inspect the isolated text index.'}
+  if($indexState.state -eq 'failed'){throw "Packaged text extraction failed: $($indexState|ConvertTo-Json -Depth 5 -Compress)"}
+  if($indexState.state -eq 'ready'){break}
+  Start-Sleep -Milliseconds 500
+ }while([DateTime]::UtcNow -lt $deadline)
+ if($indexState.state -ne 'ready'){throw "Packaged text extraction did not finish: $($indexState|ConvertTo-Json -Depth 5 -Compress)"}
+ Write-Host 'PASS: released executable starts and searches PDF, DOCX and legacy-directory text using an isolated workspace.'
 }finally{
  # Close only this test-created process and its descendants, never any existing Lexo instance.
  $all=@(Get-CimInstance Win32_Process);$known=[Collections.Generic.HashSet[int]]::new();$known.Add($started.Id)|Out-Null

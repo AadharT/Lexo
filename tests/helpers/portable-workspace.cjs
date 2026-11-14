@@ -1,0 +1,11 @@
+const fs=require('node:fs'),path=require('node:path'),{DatabaseSync}=require('node:sqlite');
+const{Store}=require('../../electron/store.cjs'),{writeProfile}=require('../../electron/workspace-profile.cjs'),{addSource}=require('../../electron/legacy-sources.cjs'),{INDEX_FILE,queryIndex}=require('../../electron/text-index-engine.cjs'),{docxText,pdfText}=require('./text-fixtures.cjs');
+async function run(){
+ const[command,base]=process.argv.slice(2);if(!base||!path.isAbsolute(base))throw Error('An absolute isolated test directory is required.');const profile=path.join(base,'profile'),root=path.join(profile,'library');
+ if(command==='seed'){
+  const store=new Store(root);try{store.savePreferences({firmName:'Portable Test Firm',workspaceName:'Fictional release checks',theme:'dark'});store.addOption('banks','Sample Bank');store.addBranch('Sample Bank','Main');const id=store.saveCase({name:'Fictional portable test',bank:'Sample Bank',branch:'Main',status:'Active'});await store.addDocument(id,'Word fixture','General','.docx',docxText('Portableword evidence'));await store.addDocument(id,'PDF fixture','General','.pdf',pdfText(['Portablepdf evidence']));const external=path.join(base,'external-originals');fs.mkdirSync(external);fs.writeFileSync(path.join(external,'Archive.docx'),docxText('Portablearchive evidence'));addSource(store,external,'Release test archive');writeProfile(profile,root);}finally{store.close();}return{state:'seeded'};
+ }
+ if(command!=='check')throw Error('Unsupported test command.');const index=path.join(root,INDEX_FILE);if(!fs.existsSync(index))return{state:'pending'};let db;
+ try{db=new DatabaseSync(index,{readOnly:true});db.exec('PRAGMA busy_timeout=1000');const rows=db.prepare('SELECT title,status,error FROM document_text').all();if(rows.some(r=>r.status==='error'))return{state:'failed',rows};const ready=rows.length===3&&rows.every(r=>r.status==='ready')&&['Portableword','Portablepdf','Portablearchive'].every(query=>queryIndex(db,{query}).results.length===1);return{state:ready?'ready':'pending',rows};}catch(e){return{state:'pending',message:e.message};}finally{db?.close();}
+}
+run().then(result=>process.stdout.write(JSON.stringify(result))).catch(e=>{console.error(e);process.exitCode=1;});

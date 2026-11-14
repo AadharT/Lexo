@@ -24,6 +24,11 @@ jobs:
         run: |
           $version=(Get-Content package.json -Raw|ConvertFrom-Json).version
           if($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version"){throw 'Tag must match package.json version.'}
+          if($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF -eq 'refs/heads/main'){
+            $event=Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw|ConvertFrom-Json
+            $message=($event.head_commit.message -split "`n")[0].Trim()
+            if($message -match '^Release (v\d+\.\d+\.\d+)$' -and $Matches[1] -ne "v$version"){throw 'Release commit must match package.json version.'}
+          }
       - name: Test durability and application storage
         shell: powershell
         run: ./scripts/lexo.ps1 test
@@ -45,7 +50,7 @@ jobs:
           name: Lexo-Windows
           path: release/Lexo-*-win-x64.exe
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release v'))
     needs: windows
     runs-on: ubuntu-latest
     permissions:
@@ -59,4 +64,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" release/*.exe --generate-notes --title "Lexo $GITHUB_REF_NAME"
+          RELEASE_MESSAGE: ${{ github.event.head_commit.message }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            RELEASE_TAG="$GITHUB_REF_NAME"
+          else
+            RELEASE_TAG=$(printf '%s\n' "$RELEASE_MESSAGE" | head -n 1 | sed -nE 's/^Release (v[0-9]+\.[0-9]+\.[0-9]+)$/\1/p')
+          fi
+          test -n "$RELEASE_TAG" || { echo 'Invalid release commit subject'; exit 1; }
+          RELEASE_ASSET="release/Lexo-${RELEASE_TAG#v}-win-x64.exe"
+          test -f "$RELEASE_ASSET"
+          gh release create "$RELEASE_TAG" "$RELEASE_ASSET" --target "$RELEASE_COMMIT" --generate-notes --title "Lexo $RELEASE_TAG"

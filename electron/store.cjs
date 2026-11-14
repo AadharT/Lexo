@@ -178,6 +178,7 @@ class Store {
     } catch(e) { this.db.exec('ROLLBACK'); throw e; }
   }
   archiveCase(id, archived) { this.getCase(id); this.db.prepare('UPDATE cases SET archived=?,updated_at=? WHERE id=?').run(archived?1:0,new Date().toISOString(),id); }
+  setCaseStatus(id,value){const c=this.getCase(id),status=this.canonicalOption('statuses',value);if(!status)throw Error('Choose a status from the firm list.');this.db.prepare('UPDATE cases SET status=?,updated_at=? WHERE id=?').run(status,new Date().toISOString(),c.id);return status;}
   documentPath(id) { const d=this.db.prepare('SELECT * FROM documents WHERE id=?').get(text(id)); if(!d) throw Error('Document not found.'); return inside(this.root,d.relative_path); }
   async addDocument(caseId,title,type,extension,buffer) {
     this.getCase(caseId); title=text(title,200);type=text(type,100);
