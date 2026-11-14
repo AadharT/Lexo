@@ -1,3 +1,13 @@
+# Lexo 0.5.1
+
+- Move document search into an independent read-only worker, with cancellation and timeout recovery.
+- Page through all global document results with exact totals and 25, 50 or 100 rows per page. Add pagination to case lists and per-case document lists.
+- Rank documents before selecting excerpts and index section lookups for the visible page.
+- Replace workspace reloads during background indexing with throttled status snapshots and stable data revisions.
+- Avoid document filesystem scans during UI refreshes, repeated idle text hashing and nested case/document joins on every keystroke.
+
+Existing cases and originals stay in their workspace. Derived search indexes upgrade in the background. See PERFORMANCE.md for local measurements and validation scope.
+
 # Lexo 0.5.0
 
 - Review a case with AI in Codex, with local case context, memories and skill folders.

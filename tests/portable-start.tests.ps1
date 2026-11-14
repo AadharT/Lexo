@@ -33,7 +33,14 @@ try{
   Start-Sleep -Milliseconds 500
  }while([DateTime]::UtcNow -lt $deadline)
  if($indexState.state -ne 'ready'){throw "Packaged text extraction did not finish: $($indexState|ConvertTo-Json -Depth 5 -Compress)"}
- Write-Host 'PASS: released executable starts and searches PDF, DOCX and legacy-directory text using an isolated workspace.'
+ $packagedWorker=$null
+ foreach($info in @(Get-CimInstance Win32_Process -Filter "Name = 'Lexo.exe'")){
+  if($info.ExecutablePath){$candidate=Join-Path (Split-Path -Parent $info.ExecutablePath) 'resources/app.asar.unpacked/electron/document-search-worker.cjs';if(Test-Path -LiteralPath $candidate){$process=Get-Process -Id $info.ProcessId -ErrorAction SilentlyContinue;if($process -and $process.StartTime -ge $startedAt){$packagedWorker=$candidate;break}}}
+ }
+ if(-not $packagedWorker){throw 'Could not locate the released search worker in the test-created application.'}
+ $searchState=& $nodeExecutable $fixtureScript search $testRoot $packagedWorker | ConvertFrom-Json
+ if($LASTEXITCODE -ne 0 -or $searchState.state -ne 'ready'){throw 'The packaged read-only search worker failed its checks.'}
+ Write-Host 'PASS: released executable indexes and searches PDF, DOCX and legacy files with the packaged read-only search worker.'
 }finally{
  # Close only this test-created process and its descendants, never any existing Lexo instance.
  $all=@(Get-CimInstance Win32_Process);$known=[Collections.Generic.HashSet[int]]::new();$known.Add($started.Id)|Out-Null

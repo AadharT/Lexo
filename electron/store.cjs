@@ -45,16 +45,16 @@ class Store {
     }return issues;
   }
   safety(){return{schemaVersion:CURRENT_SCHEMA,workspaceId:this.db.prepare("SELECT value FROM settings WHERE key='workspaceId'").get().value,appVersion:this.options.appVersion,recoveryFolder:this.root+'.lexo-recovery',latestRecoverySnapshot:this.lastRecoverySnapshot||latestSnapshot(this.root),pendingRecovery:this.pendingRecovery||[],recoveryNotice:this.recoveryNotice||null};}
-  state() {
-    const documents = this.db.prepare('SELECT * FROM documents ORDER BY created_at DESC').all().map(d => {
-      try { const s=fs.statSync(inside(this.root,d.relative_path)); return {...d, size:s.size, modified_at:s.mtime.toISOString(), missing:false}; }
-      catch { return {...d,missing:true}; }
+  preferences(){return Object.fromEntries(this.db.prepare('SELECT * FROM settings').all().map(x=>[x.key,x.value]));}
+  state({fileStats=true}={}) {
+    const documents=this.db.prepare('SELECT * FROM documents ORDER BY created_at DESC').all().map(d=>{
+      if(!fileStats)return{...d,size:null,modified_at:d.created_at,missing:false};
+      try{const stat=fs.statSync(inside(this.root,d.relative_path));return{...d,size:stat.size,modified_at:stat.mtime.toISOString(),missing:false};}catch{return{...d,missing:true};}
     });
-    const values=this.db.prepare('SELECT * FROM field_values').all();
-    return { cases:this.db.prepare('SELECT * FROM cases ORDER BY updated_at DESC').all().map(c=>({...c,custom:Object.fromEntries(values.filter(v=>v.case_id===c.id).map(v=>[v.field_id,v.number_value??v.bool_value??v.date_value??v.text_value]))})), documents,
+    const custom=new Map();for(const v of this.db.prepare('SELECT * FROM field_values').all()){if(!custom.has(v.case_id))custom.set(v.case_id,{});custom.get(v.case_id)[v.field_id]=v.number_value??v.bool_value??v.date_value??v.text_value;}
+    return{cases:this.db.prepare('SELECT * FROM cases ORDER BY updated_at DESC').all().map(c=>({...c,custom:custom.get(c.id)||{}})),documents,
       fields:this.db.prepare('SELECT * FROM fields ORDER BY rowid').all().map(f=>({...f,choices:JSON.parse(f.choices)})),branches:this.db.prepare('SELECT b.*,d.ifsc,d.city,d.state,d.address,d.branch_name,d.source,d.source_version FROM branches b LEFT JOIN branch_directory_details d ON d.branch_id=b.id ORDER BY b.bank,b.name').all(),
-      options:{statuses:[],documentTypes:[],banks:[] ,...Object.fromEntries(['statuses','documentTypes','banks'].map(k=>[k,this.db.prepare('SELECT value FROM options WHERE kind=? ORDER BY value').all(k).map(x=>x.value)]))},
-      safety:this.safety(),settings:Object.fromEntries(this.db.prepare('SELECT * FROM settings').all().map(x=>[x.key,x.value])), libraryPath:this.root };
+      options:{statuses:[],documentTypes:[],banks:[],...Object.fromEntries(['statuses','documentTypes','banks'].map(k=>[k,this.db.prepare('SELECT value FROM options WHERE kind=? ORDER BY value').all(k).map(x=>x.value)]))},safety:this.safety(),settings:this.preferences(),libraryPath:this.root};
   }
   setting(k,v) { this.db.prepare('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k,v); }
   savePreferences(input){

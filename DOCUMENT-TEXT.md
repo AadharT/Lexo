@@ -20,10 +20,10 @@ The case-context file lists each document's fresh text path and status. `.lexo/T
 
 The derived `.lexo-search.sqlite` index sits at the workspace root, separate from `lexo.sqlite`. FTS5 indexes source sections and whole documents. Queries use Unicode word tokens with prefix matching. All terms must occur in a section or somewhere in the document. Section locations are preferred; cross-section matches are labelled Whole document instead of inventing a page reference.
 
-Search returns excerpts with filters for bank, branch, document type, date and case. Archived cases are excluded. Up to 100 distinct content-matched documents are returned, with an indication when limited. Metadata and existing client-name search remain available. A separate read connection serves search while the worker parses and indexes.
+Search returns excerpts with filters for bank, branch, document type, date and case. Archived cases are excluded. Results are paginated in SQLite with exact totals, stable ordering and 25/50/100 rows per page. Only visible rows get source excerpts. Metadata and existing client-name search remain available. A dedicated read-only worker serves search while a separate worker parses and indexes. Replaced requests are cancelled; queries exceeding five seconds stop with a retry message.
 
-Case-document text copies are included in existing encrypted backups and recovery copies. The derived index is omitted and rebuilt after restore. Extraction stops before backup, workspace moves and restores. The main case database schema is unchanged.
+Case-document text copies are included in existing encrypted backups and recovery copies. The derived index is omitted and rebuilt after restore. Extraction stops before backup, workspace moves and restores. The main case database schema is unchanged. Derived search tables upgrade in the background without rewriting originals.
 
 Limits: 100 MB per original, 2,000 PDF pages, 12 MB extracted text, and bounded DOCX XML parts. Worker memory and idle-time limits stop runaway extraction. Password-protected, unsupported and damaged files show failures. Semantic search and OCR are future work.
 
-Dependencies and packaging settings are prepared for future releases. This work remains local: verification uses Node tests and pnpm dev, with no executable generated.
+Dependencies and packaging settings are prepared for future releases. This work remains local: verification uses Node tests and pnpm dev, with no executable generated. See [PERFORMANCE.md](PERFORMANCE.md) for the local performance checks.

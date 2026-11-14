@@ -30,23 +30,23 @@ else {
     store=new Store(selected.root,{allowCreate:selected.allowCreate,appVersion:app.getVersion()});
     startText();
     vault=new BackupVault(profile,safeStorage);loadBackupKey();
-    if(store.state().settings.setupComplete==='true')writeProfile(profile,store.root);
+    if(store.preferences().setupComplete==='true')writeProfile(profile,store.root);
     directory=new BankDirectory(path.join(app.getPath('userData'),'reference'),{workerPath:app.isPackaged?path.join(process.resourcesPath,'app.asar.unpacked/electron/directory-worker.cjs'):path.join(__dirname,'directory-worker.cjs')});
     if(!directory.status().available&&process.env.LEXO_SKIP_DIRECTORY_DOWNLOAD!=='1')directory.update().catch(()=>{});
-    nativeTheme.themeSource=store.state().settings.theme||'system';
+    nativeTheme.themeSource=store.preferences().theme||'system';
     const writePointer=()=>writeProfile(profile,store.root);
     const saveWorkspace=async(_,input)=>{
       if(!input||typeof input.firmName!=='string'||!input.firmName.trim()||input.firmName.length>120||typeof input.workspaceName!=='string'||!input.workspaceName.trim()||input.workspaceName.length>120||!['light','dark','system'].includes(input.theme))throw Error('Enter firm and workspace names and select an appearance.');
       if(typeof input.root!=='string'||!path.isAbsolute(input.root))throw Error('Choose a workspace folder.');
       if(path.resolve(input.root)!==store.root){
         if(backupBusy)throw Error('Wait for the backup to finish.');
-        if(store.state().documents.length){const confirm=await dialog.showMessageBox(win,{type:'question',buttons:['Cancel','Copy workspace'],defaultId:0,cancelId:0,message:'Save and close documents in Word before changing folders.',detail:'Lexo copies the library to the selected empty folder and keeps the original as a recovery copy.'});if(confirm.response!==1)return null;}
+        if(store.db.prepare('SELECT 1 FROM documents LIMIT 1').get()){const confirm=await dialog.showMessageBox(win,{type:'question',buttons:['Cancel','Copy workspace'],defaultId:0,cancelId:0,message:'Save and close documents in Word before changing folders.',detail:'Lexo copies the library to the selected empty folder and keeps the original as a recovery copy.'});if(confirm.response!==1)return null;}
         await stopText();try{store.relocateRoot(input.root,{onSwitch:()=>{store.savePreferences(input);writePointer();}});}finally{startText();}backupPassword='';loadBackupKey();
       }
       store.savePreferences(input);writePointer();nativeTheme.themeSource=input.theme;win.setTitle(`${input.firmName.trim()} — Lexo`);return true;
     };
     const handlers={
-      state:()=>{const state=store.state(),text=textService?.status();const statuses=new Map((text?.documents||[]).map(d=>[d.id,d]));return {...state,documents:state.documents.map(d=>({...d,text:statuses.get(d.id)||{status:'pending'}})),legacySources:text?.sources||[],legacyDocumentCount:text?.legacyCount||0,textIndex:text,directory:directory.status(),requiresSetup:state.settings.setupComplete!=='true',backupUnlocked:!!backupPassword,backupRemembered,secureBackupStorage:vault.available(),backupError};},
+      state:()=>{const state=store.state({fileStats:false}),text=textService?.status();const statuses=new Map((text?.documents||[]).map(d=>[d.id,d]));return {...state,documents:state.documents.map(d=>{const t=statuses.get(d.id);return{...d,size:t?.size??null,modified_at:t?.mtime?new Date(t.mtime).toISOString():d.created_at,missing:t?.status==='missing',text:t||{status:'pending'}};}),legacySources:text?.sources||[],legacyDocumentCount:text?.legacyCount||0,textIndex:text,directory:directory.status(),requiresSetup:state.settings.setupComplete!=='true',backupUnlocked:!!backupPassword,backupRemembered,secureBackupStorage:vault.available(),backupError};},
       addLegacyDirectory:async(_,name)=>{const result=await dialog.showOpenDialog(win,{title:'Choose a legacy document directory to index',properties:['openDirectory']});if(result.canceled)return null;const source=addSource(store,result.filePaths[0],name);textService?.refresh(true,[source.id]);return source;},
       pauseLegacyDirectory:async(_,id,paused)=>{await stopText();try{setSourcePaused(store,id,paused);}finally{startText();}},
       removeLegacyDirectory:async(_,id)=>{await stopText();try{removeSource(store,id);}finally{startText();}},
@@ -77,7 +77,7 @@ else {
         const target=path.resolve(picked.filePaths[0]);if(target===store.root)return true;
         const next=new Store(target,{allowCreate:false,appVersion:app.getVersion()});
         try{writeProfile(profile,next.root);}catch(e){next.close();throw e;}
-        await stopText();store.close();store=next;startText();backupError='';loadBackupKey();const prefs=store.state().settings;nativeTheme.themeSource=prefs.theme||'system';win.setTitle(prefs.firmName?prefs.firmName+' — Lexo':'Lexo');return true;
+        await stopText();store.close();store=next;startText();backupError='';loadBackupKey();const prefs=store.preferences();nativeTheme.themeSource=prefs.theme||'system';win.setTitle(prefs.firmName?prefs.firmName+' — Lexo':'Lexo');return true;
       },
       revealRecovery:async()=>{const folder=store.safety().recoveryFolder;if(!fs.existsSync(folder))throw Error('No upgrade recovery copies have been needed yet.');const error=await shell.openPath(folder);if(error)throw Error(error);},
       chooseWorkspaceFolder:async()=>{const result=await dialog.showOpenDialog(win,{title:'Choose an empty folder for this workspace',properties:['openDirectory','createDirectory']});return result.canceled?null:result.filePaths[0];},
@@ -119,15 +119,15 @@ else {
         const picked=await dialog.showOpenDialog(win,{title:'Restore encrypted Lexo backup',properties:['openFile'],filters:[{name:'Lexo backup',extensions:['lexobak']}]});if(picked.canceled)return null;
         const answer=await dialog.showMessageBox(win,{type:'warning',buttons:['Cancel','Restore backup'],defaultId:0,cancelId:0,title:'Restore this library?',message:'Save and close all case documents in Word before continuing.',detail:'The backup will replace the active library. Your current library will be preserved in a separate recovery folder.'});
         if(answer.response!==1)return null;
-        await stopText();let previous;try{previous=store.restore(picked.filePaths[0],password);}finally{startText();}backupPassword='';backupRemembered=false;backupError='';writePointer();const restored=store.state().settings;nativeTheme.themeSource=restored.theme||'system';win.setTitle(restored.firmName?`${restored.firmName} — Lexo`:'Lexo');return previous;
+        await stopText();let previous;try{previous=store.restore(picked.filePaths[0],password);}finally{startText();}backupPassword='';backupRemembered=false;backupError='';writePointer();const restored=store.preferences();nativeTheme.themeSource=restored.theme||'system';win.setTitle(restored.firmName?`${restored.firmName} — Lexo`:'Lexo');return previous;
       }
     };
-    for(const [name,fn]of Object.entries(handlers))ipcMain.handle(`lexo:${name}`,(event,...args)=>{
+    for(const [name,fn]of Object.entries(handlers))ipcMain.handle(`lexo:${name}`,async(event,...args)=>{
       if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)throw Error('Untrusted request.');
-      return fn(event,...args);
+      const result=await fn(event,...args);if(['saveCase','archiveCase','setCaseStatus','importDocuments','createDocument','createDocumentWithAI'].includes(name))textService?.refresh(false,[],{urgent:true});return result;
     });
     app.setAppUserModelId('in.lexo.desktop');
-    const prefs=store.state().settings;
+    const prefs=store.preferences();
     win=new BrowserWindow({width:1440,height:940,minWidth:1050,minHeight:720,title:prefs.firmName?`${prefs.firmName} — Lexo`:'Lexo',icon:path.join(__dirname,'../assets/lexo.ico'),backgroundColor:nativeTheme.shouldUseDarkColors?'#16181d':'#f6f6f8',titleBarStyle:'hidden',...(process.platform==='win32'?{titleBarOverlay:windowHeaderOptions()}:{}),autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
     nativeTheme.on('updated',()=>{if(process.platform==='win32'&&win&&!win.isDestroyed())win.setTitleBarOverlay(windowHeaderOptions());});
     win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -137,7 +137,7 @@ else {
     win.webContents.on('did-fail-load',(_,code,description)=>receipt('error',description));
     win.on('focus',()=>textService?.refresh(true));
     const timer=setInterval(async()=>{
-      const s=store.state().settings;
+      const s=store.preferences();
       if(s.automaticBackup==='true'&&backupPassword&&(!s.lastBackup||Date.now()-Date.parse(s.lastBackup)>=86400000)){
         try {await runBackup();}catch(e){backupError=e.message;}
       }
@@ -145,7 +145,7 @@ else {
   }).catch(e=>{receipt('error',e.message);dialog.showErrorBox('Lexo could not open the workspace',e.message+'\n\nYour existing data has been preserved. Reconnect the workspace drive or contact support.');app.quit();});
   async function runBackup(){
     if(backupBusy)throw Error('A backup is already running.');
-    const s=store.state().settings;if(!s.backupFolder||!backupPassword)throw Error('Choose a folder and unlock backups with your password.');
+    const s=store.preferences();if(!s.backupFolder||!backupPassword)throw Error('Choose a folder and unlock backups with your password.');
     backupBusy=true;await stopText();try{const output=await store.backup(s.backupFolder,backupPassword);backupError='';return output;}finally{startText();backupBusy=false;}
   }
   app.on('window-all-closed',()=>app.quit());

@@ -1,0 +1,4 @@
+const fs=require('node:fs'),path=require('node:path'),{parentPort,workerData}=require('node:worker_threads'),{DatabaseSync}=require('node:sqlite');
+const{queryIndex,INDEX_FILE}=require('./text-index-engine.cjs');
+let db;
+parentPort.on('message',({id,input})=>{try{const file=path.join(workerData.root,INDEX_FILE);if(!fs.existsSync(file)){parentPort.postMessage({id,result:{results:[],total:0,page:1,pages:1,pageSize:input.pageSize||25,indexing:true}});return;}db??=new DatabaseSync(file,{readOnly:true});db.exec('PRAGMA busy_timeout=200');const result=queryIndex(db,input);parentPort.postMessage({id,result});}catch(e){if(/no such table|no such column/.test(e.message)){db?.close();db=null;parentPort.postMessage({id,result:{results:[],total:0,page:1,pages:1,pageSize:input.pageSize||25,indexing:true}});}else parentPort.postMessage({id,error:e.message});}});
